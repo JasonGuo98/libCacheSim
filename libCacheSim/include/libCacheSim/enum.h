@@ -33,6 +33,7 @@ typedef enum {
   PLAIN_TXT_TRACE,
   STANDARD_IQQ_TRACE,
   ORACLE_GENERAL_TRACE,
+  ORACLE_GENERAL_TRACE_FLOWS,
   LCS_TRACE,    // libCacheSim format
 
   /* special trace */
@@ -71,6 +72,7 @@ static char *g_trace_type_name[UNKNOWN_TRACE + 2] = {
     "PLAIN_TXT_TRACE",
     "STANDARD_IQI_TRACE",
     "ORACLE_GENERAL_TRACE",
+    "ORACLE_GENERAL_TRACE_FLOWS",
     "LCS_TRACE",
 
     "VSCSI_TRACE",

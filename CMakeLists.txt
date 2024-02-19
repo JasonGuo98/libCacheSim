@@ -347,8 +347,8 @@ set(LIB_SOURCE ${LIB_SOURCE} ${cache_source} ${reader_source} ${dataStructure_so
 # # https://stackoverflow.com/questions/32469953/why-is-cmake-designed-so-that-it-removes-runtime-path-when-installing
 SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-add_library(${PROJECT_NAME} ${LIB_SOURCE})
-# add_library(${PROJECT_NAME} SHARED ${LIB_SOURCE})
+# add_library(${PROJECT_NAME} ${LIB_SOURCE})
+add_library(${PROJECT_NAME} SHARED ${LIB_SOURCE})
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_VERSION})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE C)
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER ${PROJECT_SOURCE_DIR}/libCacheSim/include/libCacheSim.h)

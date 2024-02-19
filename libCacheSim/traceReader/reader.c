@@ -197,6 +197,9 @@ reader_t *setup_reader(const char *const trace_path,
     case ORACLE_GENERAL_TRACE:
       oracleGeneralBin_setup(reader);
       break;
+    case ORACLE_GENERAL_TRACE_FLOWS:
+      oracleGeneralBinFlows_setup(reader);
+      break;
     case ORACLE_GENERALOPNS_TRACE:
       oracleGeneralOpNS_setup(reader);
       break;
@@ -349,6 +352,9 @@ int read_one_req(reader_t *const reader, request_t *const req) {
         break;
       case ORACLE_GENERAL_TRACE:
         status = oracleGeneralBin_read_one_req(reader, req);
+        break;
+      case ORACLE_GENERAL_TRACE_FLOWS:
+        status = oracleGeneralBinFlows_read_one_req(reader, req);
         break;
       case ORACLE_GENERALOPNS_TRACE:
         status = oracleGeneralOpNS_read_one_req(reader, req);
