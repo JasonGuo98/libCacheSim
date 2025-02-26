@@ -7,7 +7,7 @@
 #include "../include/libCacheSim/const.h"
 
 
-mrcProfiler::MRCProfilerBase * mrcProfiler::create_mrc_profiler(mrc_profiler_e type, reader_t *reader, std::string output_path, const profiler_params_t & params) {
+mrcProfiler::MRCProfilerBase * mrcProfiler::create_mrc_profiler(mrc_profiler_e type, reader_t *reader, std::string output_path, const mrc_profiler_params_t & params) {
     switch (type) {
     case mrc_profiler_e::SHARDS_PROFILER:
       return new MRCProfilerSHARDS(reader, output_path, params);

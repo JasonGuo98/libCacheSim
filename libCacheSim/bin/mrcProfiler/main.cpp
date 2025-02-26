@@ -23,19 +23,19 @@ void print_args(struct arguments *args) {
   printf("verbose: %d\n", args->verbose);
   printf("cache_algorithm_str: %s\n", args->cache_algorithm_str);
   printf("mrc_size_str: %s\n", args->mrc_size_str);
-  printf("profiler_str: %s\n", args->profiler_str);
-  printf("profiler_params_str: %s\n", args->profiler_params_str);
+  printf("profiler_str: %s\n", args->mrc_profiler_str);
+  printf("mrc_profiler_params_str: %s\n", args->mrc_profiler_params_str);
 
-  for(int i = 0; i < args->profiler_params.profile_size.size(); i++){
-    printf("profile_size: %ld\n", args->profiler_params.profile_size[i]);
+  for(int i = 0; i < args->mrc_profiler_params.profile_size.size(); i++){
+    printf("profile_size: %ld\n", args->mrc_profiler_params.profile_size[i]);
   }
   printf("====\n");
-  for(int i = 0; i < args->profiler_params.profile_wss_ratio.size(); i++){
-    printf("profile_wss_ratio: %f\n", args->profiler_params.profile_wss_ratio[i]);
+  for(int i = 0; i < args->mrc_profiler_params.profile_wss_ratio.size(); i++){
+    printf("profile_wss_ratio: %f\n", args->mrc_profiler_params.profile_wss_ratio[i]);
   }
 
-  args->profiler_params.shards_params.print();
-  args->profiler_params.minisim_params.print();
+  args->mrc_profiler_params.shards_params.print();
+  args->mrc_profiler_params.minisim_params.print();
 }
 
 int main(int argc, char *argv[]) {
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 
   print_args(&args);
 
-  mrcProfiler::MRCProfilerBase * profiler = create_mrc_profiler(args.profiler_type, args.reader, args.ofilepath, args.profiler_params);
+  mrcProfiler::MRCProfilerBase * profiler = create_mrc_profiler(args.mrc_profiler_type, args.reader, args.ofilepath, args.mrc_profiler_params);
 
   profiler->run();
 

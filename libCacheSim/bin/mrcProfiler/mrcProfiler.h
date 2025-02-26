@@ -5,11 +5,18 @@
 
 #include "../../dataStructure/hash/hash.h"
 #include "../../dataStructure/robin_hood.h"
+#include "../../include/libCacheSim.h"
+#include "../../include/libCacheSim/cache.h"
 #include "../../include/libCacheSim/macro.h"
+#include "../../include/libCacheSim/plugin.h"
 #include "../../include/libCacheSim/reader.h"
+#include "../../include/libCacheSim/simulator.h"
+#include "./minvaluemap.h"
 #include "./splaytree.h"
 
 namespace mrcProfiler {
+
+#define MAX_MRC_PROFILE_POINTS 128
 
 typedef enum {
   SHARDS_PROFILER,
@@ -104,16 +111,16 @@ typedef struct profiler_params {
 
   struct {
     double sample_rate;
-    int64_t seed;
+    int64_t thread_num;
 
     void print() {
       printf("minisim params:\n");
       printf("  sample_rate: %f\n", sample_rate);
-      printf("  seed: %ld\n", seed);
+      printf("  thread_num: %ld\n", thread_num);
     }
 
     void parse_params(const char *str) {
-      // format: FIX_RATE,0.01,random_seed|FIX_SIZE,8192,random_seed
+      // format: FIX_RATE,0.01,thread_num
       if (strlen(str) == 0) {
         printf("invalid params for shards\n");
         exit(1);
@@ -151,8 +158,12 @@ typedef struct profiler_params {
               exit(1);
             }
           } else if (current_param_idx == 2) {
-            // check the seed
-            seed = atoi(buffer);
+            // check the thread_num
+            thread_num = atoi(buffer);
+            if (thread_num <= 0) {
+              printf("invalid thread_num for minisim: %s\n", str);
+              exit(1);
+            }
           } else {
             printf("too many params for shards: %s\n", str);
             exit(1);
@@ -170,11 +181,11 @@ typedef struct profiler_params {
   std::vector<double> profile_wss_ratio;
   char *cache_algorithm_str;
 
-} profiler_params_t;
+} mrc_profiler_params_t;
 
 class MRCProfilerBase {
  public:
-  MRCProfilerBase(reader_t *reader, std::string output_path, const profiler_params_t &params)
+  MRCProfilerBase(reader_t *reader, std::string output_path, const mrc_profiler_params_t &params)
       : reader_(reader),
         output_path_(std::move(output_path)),
         params_(params),
@@ -182,13 +193,40 @@ class MRCProfilerBase {
         hit_cnt_vec(params.profile_size.size(), 0),
         hit_size_vec(params.profile_size.size(), 0) {}
   virtual void run() = 0;
-  virtual void print() = 0;
+  void print() {
+    if (!has_run_) {
+      printf("MRCProfiler has not been run\n");
+      return;
+    }
+
+    printf("%s profiler:\n", profiler_name_);
+    printf("  n_req: %ld\n", n_req_);
+    printf("  sum_obj_size_req: %ld\n", sum_obj_size_req);
+
+    if (params_.profile_wss_ratio.size() != 0) {
+      printf("wss_ratio\t");
+    }
+    printf("cache_size\tmiss_rate\tbyte_miss_rate\n");
+    for (int i = 0; i < mrc_size_vec.size(); i++) {
+      if (params_.profile_wss_ratio.size() != 0) {
+        printf("%lf\t", params_.profile_wss_ratio[i]);
+      }
+      double miss_rate = 1 - (double)hit_cnt_vec[i] / (n_req_);
+      double byte_miss_rate = 1 - (double)hit_size_vec[i] / (sum_obj_size_req);
+
+      // clip to [0, 1]
+      miss_rate = miss_rate > 1 ? 1 : (miss_rate < 0 ? 0 : miss_rate);
+      byte_miss_rate = byte_miss_rate > 1 ? 1 : (byte_miss_rate < 0 ? 0 : byte_miss_rate);
+      printf("%ldB\t%lf\t%lf\n", mrc_size_vec[i], miss_rate, byte_miss_rate);
+    }
+  }
 
  protected:
   reader_t *reader_ = nullptr;
   std::string output_path_;
-  profiler_params_t params_;
+  mrc_profiler_params_t params_;
   bool has_run_ = false;
+  char * profiler_name_ = nullptr;
 
   size_t n_req_ = 0;
   size_t sum_obj_size_req = 0;
@@ -199,9 +237,9 @@ class MRCProfilerBase {
 
 class MRCProfilerSHARDS : public MRCProfilerBase {
  public:
-  explicit MRCProfilerSHARDS(reader_t *reader, std::string output_path, const profiler_params_t &params)
+  explicit MRCProfilerSHARDS(reader_t *reader, std::string output_path, const mrc_profiler_params_t &params)
       : MRCProfilerBase(reader, output_path, params) {
-    ;
+    profiler_name_ = "SHARDS";
   }
 
   void run() override {
@@ -216,43 +254,26 @@ class MRCProfilerSHARDS : public MRCProfilerBase {
     has_run_ = true;
   }
 
-  void print() override {
-    if (!has_run_) {
-      printf("MRCProfilerSHARDS has not been run\n");
-      return;
-    }
-
-    printf("SHARDS profiler:\n");
-
-    printf("  n_req: %ld\n", n_req_);
-    printf("  sum_obj_size_req: %ld\n", sum_obj_size_req);
-
-    if(params_.profile_wss_ratio.size()!=0){
-        printf("wss_ratio\t");
-    }
-    printf("cache_size\thit_rate\tbyte_hit_rate\n");
-    for(int i = 0; i < mrc_size_vec.size(); i++){
-        if(params_.profile_wss_ratio.size()!=0){
-            printf("%lf\t", params_.profile_wss_ratio[i]);
-        }
-      printf("%ld\t%ld\t%ld\n", mrc_size_vec[i], hit_cnt_vec[i], hit_size_vec[i]);
-    }
-  }
 
  private:
-
-
   void fixed_sample_rate_run() {
-    double sample_rate = params_.shards_params.sample_rate;
+    // 1. init
     request_t *req = new_request();
-    read_one_req(reader_, req);
-
+    double sample_rate = params_.shards_params.sample_rate;
+    std::vector<double> local_hit_cnt_vec(mrc_size_vec.size(), 0);
+    std::vector<double> local_hit_size_vec(mrc_size_vec.size(), 0);
     uint64_t sample_max = UINT64_MAX * sample_rate;
-    int64_t sampled_cnt = 0, sampled_size = 0;
+    if (sample_rate == 1) {
+      printf("sample_rate is 1, no need to sample\n");
+      sample_max = UINT64_MAX;
+    }
+    double sampled_cnt = 0, sampled_size = 0;
     int64_t current_time = 0;
-
     robin_hood::unordered_map<obj_id_t, int64_t> last_access_time_map;
     SplayTree<int64_t, uint64_t> rd_tree;
+
+    // 2. go through the trace
+    read_one_req(reader_, req);
     /* going through the trace */
     do {
       DEBUG_ASSERT(req->obj_size != 0);
@@ -262,12 +283,12 @@ class MRCProfilerSHARDS : public MRCProfilerBase {
       uint64_t hash_value = get_hash_value_int_64_with_seed(req->obj_id, params_.shards_params.seed);
       current_time += 1;
       if (hash_value <= sample_max) {
-        sampled_cnt += 1;
-        sampled_size += req->obj_size;
+        sampled_cnt += 1.0 / sample_rate;
+        sampled_size += 1.0 * req->obj_size / sample_rate;
 
         if (last_access_time_map.count(req->obj_id)) {
           int64_t last_access_time = last_access_time_map[req->obj_id];
-          size_t stack_dist = rd_tree.getDistance(last_access_time)/sample_rate;
+          size_t stack_distance = rd_tree.getDistance(last_access_time) / sample_rate;
 
           last_access_time_map[req->obj_id] = current_time;
 
@@ -276,13 +297,13 @@ class MRCProfilerSHARDS : public MRCProfilerBase {
           rd_tree.insert(current_time, req->obj_size);
 
           // find bucket to increase hit cnt and hit size
-          auto it = std::lower_bound(mrc_size_vec.begin(), mrc_size_vec.end(), stack_dist);
+          auto it = std::lower_bound(mrc_size_vec.begin(), mrc_size_vec.end(), stack_distance);
 
-          if(it != mrc_size_vec.end()){
+          if (it != mrc_size_vec.end()) {
             // update hit cnt and hit size
             int idx = std::distance(mrc_size_vec.begin(), it);
-            hit_cnt_vec[idx] += 1;
-            hit_size_vec[idx] += req->obj_size;
+            local_hit_cnt_vec[idx] += 1.0 / sample_rate;
+            local_hit_size_vec[idx] += 1.0 * req->obj_size / sample_rate;
           }
 
         } else {
@@ -295,36 +316,171 @@ class MRCProfilerSHARDS : public MRCProfilerBase {
       read_one_req(reader_, req);
     } while (req->valid);
 
-    
-    int64_t should_sampled_cnt = n_req_ * sample_rate, should_sampled_size = sum_obj_size_req * sample_rate;
-    printf("sampled_cnt: %ld, sampled_size: %ld\n", sampled_cnt, sampled_size);
-    printf("should_sampled_cnt: %ld, should_sampled_size: %ld\n", should_sampled_cnt, should_sampled_size);
-    hit_cnt_vec[0] += should_sampled_cnt - sampled_cnt;
-    hit_size_vec[0] += should_sampled_size - sampled_size;
+    // 3. adjust the hit cnt and hit size
+    local_hit_cnt_vec[0] += n_req_ - sampled_cnt;
+    local_hit_size_vec[0] += sum_obj_size_req - sampled_size;
+
+    free_request(req);
+
+    // 4. calculate the mrc
+    int64_t accu_hit_cnt = 0, accu_hit_size = 0;
+    for (int i = 0; i < mrc_size_vec.size(); i++) {
+      accu_hit_cnt += local_hit_cnt_vec[i];
+      accu_hit_size += local_hit_size_vec[i];
+      hit_cnt_vec[i] = accu_hit_cnt;
+      hit_size_vec[i] = accu_hit_size;
+    }
   }
 
-  void fixed_sample_size_run() { ; }
+  void fixed_sample_size_run() {
+    double sample_rate = 1.0;
+    request_t *req = new_request();
+    read_one_req(reader_, req);
+
+    uint64_t sample_max = UINT64_MAX;
+    int64_t max_to_keep = params_.shards_params.sample_size;
+    double sampled_cnt = 0, sampled_size = 0;
+    int64_t current_time = 0;
+
+    MinValueMap<int64_t, uint64_t> min_value_map(max_to_keep);
+
+    robin_hood::unordered_map<obj_id_t, int64_t> last_access_time_map;
+    SplayTree<int64_t, uint64_t> rd_tree;
+    /* going through the trace */
+    do {
+      DEBUG_ASSERT(req->obj_size != 0);
+      n_req_ += 1;
+      sum_obj_size_req += req->obj_size;
+
+      uint64_t hash_value = get_hash_value_int_64_with_seed(req->obj_id, params_.shards_params.seed);
+      current_time += 1;
+      if (!min_value_map.full() || hash_value <= min_value_map.get_max_value()) {
+        // this is a sampled req
+        if (!min_value_map.full()) {
+          sample_rate = 1.0;  // still 100% sample rate
+        } else {
+          sample_rate = min_value_map.get_max_value() * 1.0 / UINT64_MAX;  // change the sample rate
+          printf("sample_rate: %lf\n", sample_rate);
+        }
+        int64_t poped_id = min_value_map.insert(req->obj_id, hash_value);
+
+        if (poped_id != -1) {
+          // this is a sampled req
+          int64_t poped_id_access_time = last_access_time_map[poped_id];
+          rd_tree.erase(poped_id_access_time);
+          last_access_time_map.erase(poped_id);
+        }
+
+        sampled_cnt += 1.0 / sample_rate;
+        sampled_size += 1.0 * req->obj_size / sample_rate;
+
+        if (last_access_time_map.count(req->obj_id)) {
+          int64_t last_acc_time = last_access_time_map[req->obj_id];
+          int64_t stack_distance = rd_tree.getDistance(last_acc_time) * 1.0 / sample_rate;
+
+          last_access_time_map[req->obj_id] = current_time;
+
+          rd_tree.erase(last_acc_time);
+          rd_tree.insert(current_time, req->obj_size);
+
+          // find bucket to increase hit cnt and hit size
+          auto it = std::lower_bound(mrc_size_vec.begin(), mrc_size_vec.end(), stack_distance);
+
+          printf("it: %d\n");
+
+          if (it != mrc_size_vec.end()) {
+            // update hit cnt and hit size
+            int idx = std::distance(mrc_size_vec.begin(), it);
+            hit_cnt_vec[idx] += 1.0 / sample_rate;
+            hit_size_vec[idx] += req->obj_size * 1.0 / sample_rate;
+          }
+        } else {
+          last_access_time_map[req->obj_id] = current_time;
+          rd_tree.insert(current_time, req->obj_size);
+        }
+      }
+
+      read_one_req(reader_, req);
+    } while (req->valid);
+
+    // adjust the hit cnt and hit size
+    hit_cnt_vec[0] += n_req_ - sampled_cnt;
+    hit_size_vec[0] += sum_obj_size_req - sampled_size;
+
+    free_request(req);
+  }
 };
 
 class MRCProfilerMINISIM : public MRCProfilerBase {
  public:
-  explicit MRCProfilerMINISIM(reader_t *reader, std::string output_path, const profiler_params_t &params)
-      : MRCProfilerBase(reader, output_path, params) {}
+  explicit MRCProfilerMINISIM(reader_t *reader, std::string output_path, const mrc_profiler_params_t &params)
+      : MRCProfilerBase(reader, output_path, params) {
+        profiler_name_ = "MINISIM";
+      }
 
-  void run() override {}
-  void print() override {
-    if (!has_run_) {
-      printf("MRCProfilerMINISIM has not been run\n");
-      return;
+  void run() override {
+    has_run_ = true;
+
+    // 1. obtain the n_req_ and sum_obj_size_req
+    request_t *req = new_request();
+    read_one_req(reader_, req);
+    double sample_rate = params_.minisim_params.sample_rate;
+    double sampled_cnt = 0, sampled_size = 0;
+
+    do {
+      DEBUG_ASSERT(req->obj_size != 0);
+      n_req_ += 1;
+      sum_obj_size_req += req->obj_size;
+
+      read_one_req(reader_, req);
+    } while (req->valid);
+    // 2. set spatial sampling to the reader, and obtain the sampled_cnt and sampled_size
+    reset_reader(reader_);
+    if (sample_rate > 0.5) {
+      printf("sample_rate is too large, do not sample\n");
+    } else {
+      sampler_t *sampler = create_spatial_sampler(sample_rate);
+      set_spatial_sampler_seed(sampler, 10000019);
+      reader_->init_params.sampler = sampler;
+      reader_->sampler = sampler;
+      printf("sampling_ratio_inv: %d\n", sampler->sampling_ratio_inv);
     }
+    read_one_req(reader_, req);
+    do {
+      DEBUG_ASSERT(req->obj_size != 0);
+      sampled_cnt += 1;
+      sampled_size += req->obj_size;
 
-    printf("MINISIM profiler:\n");
+      read_one_req(reader_, req);
+    } while (req->valid);
+
+    // 3. run the simulate_with_multi_caches
+    cache_t *caches[MAX_MRC_PROFILE_POINTS];
+    for (int i = 0; i < params_.profile_size.size(); i++) {
+      size_t _cache_size = mrc_size_vec[i] * sample_rate;
+      // size_t _cache_size = mrc_size_vec[i];
+      common_cache_params_t cc_params = {.cache_size = _cache_size};
+      caches[i] = create_cache(params_.cache_algorithm_str, cc_params, nullptr);
+    }
+    result = simulate_with_multi_caches(reader_, caches, mrc_size_vec.size(), NULL, 0, 0,
+                                        params_.minisim_params.thread_num, true, true);
+
+    // 4. adjust hit cnt and hit size
+    printf("sampled_cnt: %lf, sampled_size: %lf\n", sampled_cnt, sampled_size);
+    for (int i = 0; i < mrc_size_vec.size(); i++) {
+
+      printf("n_miss %ld, n_miss_byte %ld\n", result[i].n_miss, result[i].n_miss_byte);
+
+      hit_cnt_vec[i] = n_req_ - result[i].n_miss * reader_->sampler->sampling_ratio_inv;
+      hit_size_vec[i] = sum_obj_size_req - result[i].n_miss_byte * reader_->sampler->sampling_ratio_inv;
+    }
   }
 
  private:
+  cache_stat_t *result = nullptr;
 };
 
 MRCProfilerBase *create_mrc_profiler(mrc_profiler_e type, reader_t *reader, std::string output_path,
-                                     const profiler_params_t &params);
+                                     const mrc_profiler_params_t &params);
 
 }  // namespace mrcProfiler

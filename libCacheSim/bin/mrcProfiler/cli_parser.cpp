@@ -33,6 +33,7 @@ enum argp_option_short {
   OPTION_MRC_SIZE = 0x101,
   OPTION_PROFILER = 0x102,
   OPTION_PROFILER_PARAMS = 0x103,
+  OPTION_IGNORE_OBJ_SIZE = 0x104,
 };
 
 /*
@@ -49,7 +50,7 @@ static struct argp_option options[] = {
      1},
 
     {NULL, 0, NULL, 0, "mrc profiler task options:", 0},
-    {"algo", OPTION_CACHE_ALGORITHM, "lru", OPTION_ARG_OPTIONAL,
+    {"algo", OPTION_CACHE_ALGORITHM, "LRU", OPTION_ARG_OPTIONAL,
      "Which algorithm to profile", 2},
     {"size", OPTION_MRC_SIZE, "0.01,1,100", OPTION_ARG_OPTIONAL,
      "MRC profile size", 2},
@@ -60,6 +61,8 @@ static struct argp_option options[] = {
      OPTION_ARG_OPTIONAL,
      "profiler parameters", 
      2},
+    {"ignore-obj-size", OPTION_IGNORE_OBJ_SIZE, NULL, OPTION_ARG_OPTIONAL,
+     "Ignore object size", 2},
 
     {NULL, 0, NULL, 0, "common parameters:", 0},
 
@@ -93,12 +96,14 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
       arguments->mrc_size_str = arg;
       break;
     case OPTION_PROFILER:
-      arguments->profiler_str = arg;
+      arguments->mrc_profiler_str = arg;
       break;
     case OPTION_PROFILER_PARAMS:
-      arguments->profiler_params_str = arg;
+      arguments->mrc_profiler_params_str = arg;
       break;
-
+    case OPTION_IGNORE_OBJ_SIZE:
+      arguments->ignore_obj_size = true;
+      break;
     case OPTION_VERBOSE:
       arguments->verbose = is_true(arg) ? true : false;
       break;
@@ -128,15 +133,17 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
    A description of the non-option command-line arguments
      that we accept.
 */
-static char args_doc[] = "trace_path trace_type --algo=[lru] --profiler=[SHARDS] --profiler-params=[FIX_RATE,0.01,random_seed|FIX_SIZE,8192,random_seed] --size=[0.01,1,100|1MiB,100MiB,100|0.001,0.002,0.004,0.008,0.016|1MiB,10MiB,10MiB,1GiB]";
+static char args_doc[] = "trace_path trace_type --algo=[LRU] --profiler=[SHARDS] --profiler-params=[FIX_RATE,0.01,random_seed|FIX_SIZE,8192,random_seed|FIX_RATE,0.01,thread_num(for MINISIM)] --size=[0.01,1,100|1MiB,100MiB,100|0.001,0.002,0.004,0.008,0.016|1MiB,10MiB,10MiB,1GiB]";
 
 /* Program documentation. */
 static char doc[] =
-    "example: ./bin/mrcProfiler ../data/cloudPhysicsIO.vscsi vscsi --algo=lru --profiler=SHARDS --profiler-params=FIX_RATE,0.01,42 --size=0.01,1,100\n\n"
+    "example: ./bin/mrcProfiler ../data/cloudPhysicsIO.vscsi vscsi --algo=LRU --profiler=SHARDS --profiler-params=FIX_RATE,0.01,42 --size=0.01,1,100\n\n"
     "trace_type: txt/csv/twr/vscsi/oracleGeneralBin and more\n"
     "if using csv trace, considering specifying -t obj-id-is-num=true\n"
+    "algo: "
+    "SHARDS only supports LRU, and MINISIM supports other eviction algorithms\n"
     "profiler: "
-    "SHARDS only supports lru, MINISIM supports other eviction algorithms\n"
+    "SHARDS or MINISIM\n"
     "profiler-params: "
     "only SHARDS support fix_size sampling\n"
     "size: "
@@ -213,7 +220,7 @@ static unsigned long conv_size_str_to_byte_ul(char *cache_size_str) {
  * @param mrc_size_str
  * @param params
  */
-static void parse_mrc_size_params(const char * mrc_size_str, mrcProfiler::profiler_params_t &params){
+static void parse_mrc_size_params(const char * mrc_size_str, mrcProfiler::mrc_profiler_params_t &params){
     std::vector<std::string> mrc_size_vec = split_by_char(mrc_size_str, ',');
 
     // parse mrc size
@@ -310,6 +317,11 @@ static void parse_mrc_size_params(const char * mrc_size_str, mrcProfiler::profil
             }
         }
     }
+
+    if(params.profile_size.size() > MAX_MRC_PROFILE_POINTS || params.profile_wss_ratio.size() > MAX_MRC_PROFILE_POINTS){
+        printf("mrc size must be less than MAX_MRC_PROFILE_POINTS\n");
+        exit(1);
+    }
 }
 
 
@@ -323,10 +335,10 @@ static void parse_mrc_size_params(const char * mrc_size_str, mrcProfiler::profil
  * @param profiler_type
  * @param params
  */
-void mrc_profiler_init(const char * cache_algorithm_str, const char * profiler_str, const char * params_str, const char * mrc_size_str, mrcProfiler::mrc_profiler_e &profiler_type, mrcProfiler::profiler_params_t &params){
+void mrc_profiler_init(const char * cache_algorithm_str, const char * profiler_str, const char * params_str, const char * mrc_size_str, mrcProfiler::mrc_profiler_e &profiler_type, mrcProfiler::mrc_profiler_params_t &params){
     if(strcmp(profiler_str, "SHARDS") == 0 || strcmp(profiler_str, "shards") == 0){
         profiler_type = mrcProfiler::SHARDS_PROFILER;
-        if(strcmp(cache_algorithm_str, "LRU") != 0 && strcmp(cache_algorithm_str, "lru") != 0){
+        if(strcmp(cache_algorithm_str, "LRU")){
             printf("cache algorithm must be LRU for SHARDS\n");
             exit(1);
         }
@@ -337,6 +349,8 @@ void mrc_profiler_init(const char * cache_algorithm_str, const char * profiler_s
         params.shards_params.parse_params(params_str);
     }else if(strcmp(profiler_str, "MINISIM") == 0 || strcmp(profiler_str, "minisim") == 0){
         profiler_type = mrcProfiler::MINISIM_PROFILER;
+
+        params.cache_algorithm_str = (char *)cache_algorithm_str;
 
         // init minisim params
         params.minisim_params.parse_params(params_str);
@@ -366,10 +380,11 @@ static void init_arg(struct arguments *args) {
   args->verbose = false;
 
   /* profiler params */
+  args->ignore_obj_size = false;
   args->cache_algorithm_str = "LRU";
   args->mrc_size_str = "0.01,1,100";
-  args->profiler_str = "SHARDS";
-  args->profiler_params_str = "FIX_RATE,0.01,42";
+  args->mrc_profiler_str = "SHARDS";
+  args->mrc_profiler_params_str = "FIX_RATE,0.01,42";
 
   args->reader = NULL;
 }
@@ -397,11 +412,11 @@ void parse_cmd(int argc, char *argv[], struct arguments *args) {
   }
 
   args->reader = create_reader(trace_type_str, args->trace_path,
-                               args->trace_type_params, args->n_req, false, 1);
+                               args->trace_type_params, args->n_req, args->ignore_obj_size, 1);
 
-  mrc_profiler_init(args->cache_algorithm_str, args->profiler_str, args->profiler_params_str, args->mrc_size_str, args->profiler_type, args->profiler_params);
+  mrc_profiler_init(args->cache_algorithm_str, args->mrc_profiler_str, args->mrc_profiler_params_str, args->mrc_size_str, args->mrc_profiler_type, args->mrc_profiler_params);
 
-  if(args->profiler_params.profile_wss_ratio.size() != 0){
+  if(args->mrc_profiler_params.profile_wss_ratio.size() != 0){
     // need calcuate the working set size
     long wss = 0;
     int64_t wss_obj = 0, wss_byte = 0;
@@ -409,8 +424,8 @@ void parse_cmd(int argc, char *argv[], struct arguments *args) {
     // TODO: support ignore_obj_size
     wss = wss_byte;
 
-    for(int i = 0; i < args->profiler_params.profile_wss_ratio.size(); i++){
-      args->profiler_params.profile_size.push_back(wss * args->profiler_params.profile_wss_ratio[i]);
+    for(int i = 0; i < args->mrc_profiler_params.profile_wss_ratio.size(); i++){
+      args->mrc_profiler_params.profile_size.push_back(wss * args->mrc_profiler_params.profile_wss_ratio[i]);
     }
   }
 }

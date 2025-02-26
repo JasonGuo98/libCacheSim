@@ -25,13 +25,14 @@ struct arguments {
   bool verbose;
 
   /* profiler params */
+  bool ignore_obj_size;
   char *cache_algorithm_str;
   char *mrc_size_str;
-  char *profiler_str;
-  char *profiler_params_str;
+  char *mrc_profiler_str;
+  char *mrc_profiler_params_str;
 
-  mrcProfiler::mrc_profiler_e profiler_type;
-  mrcProfiler::profiler_params_t profiler_params;
+  mrcProfiler::mrc_profiler_e mrc_profiler_type;
+  mrcProfiler::mrc_profiler_params_t mrc_profiler_params;
 
   /* arguments generated */
   reader_t *reader;
