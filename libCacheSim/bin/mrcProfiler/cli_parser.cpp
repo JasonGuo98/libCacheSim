@@ -10,8 +10,8 @@
 #include "../../utils/include/mystr.h"
 #include "../../utils/include/mysys.h"
 #include "../cli_reader_utils.h"
-#include "internal.h"
 #include "./mrcProfiler.h"
+#include "./internal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,17 +49,17 @@ static struct argp_option options[] = {
      "Num of requests to process, default -1 means all requests in the trace",
      1},
 
-    {NULL, 0, NULL, 0, "mrc profiler task options:", 0},
+    {NULL, 0, NULL, 0, "mrc profiler options:", 0},
     {"algo", OPTION_CACHE_ALGORITHM, "LRU", OPTION_ARG_OPTIONAL,
-     "Which algorithm to profile", 2},
+     "Which algorithm to profile. Only Support LRU for SHARDS.", 2},
     {"size", OPTION_MRC_SIZE, "0.01,1,100", OPTION_ARG_OPTIONAL,
-     "MRC profile size", 2},
+     "MRC profile size. Support 4 format [0.01,1,100|1MiB,100MiB,100|0.001,0.002,0.004,0.008,0.016|1MiB,10MiB,10MiB,1GiB]", 2},
     {"profiler", OPTION_PROFILER, "SHARDS", OPTION_ARG_OPTIONAL,
-     "which profiler to use", 
+     "Which profiler to use. Support SHARDS|MINISIM", 
      2},
     {"profiler-params", OPTION_PROFILER_PARAMS, "",
      OPTION_ARG_OPTIONAL,
-     "profiler parameters", 
+     "Profiler parameters. ", 
      2},
     {"ignore-obj-size", OPTION_IGNORE_OBJ_SIZE, NULL, OPTION_ARG_OPTIONAL,
      "Ignore object size", 2},
@@ -304,10 +304,9 @@ static void parse_mrc_size_params(const char * mrc_size_str, mrcProfiler::mrc_pr
         }
         else{
             for(int i = 0; i < mrc_size_vec.size(); i++){
-                uint64_t size = conv_size_str_to_byte_ul((char *)mrc_size_vec[1].c_str());
+                uint64_t size = conv_size_str_to_byte_ul((char *)mrc_size_vec[i].c_str());
                 params.profile_size.push_back(size);
             }
-
             // cache size must be increasing
             for(int i = 0; i < params.profile_size.size() - 1; i++){
                 if(params.profile_size[i] >= params.profile_size[i + 1]){
@@ -335,7 +334,7 @@ static void parse_mrc_size_params(const char * mrc_size_str, mrcProfiler::mrc_pr
  * @param profiler_type
  * @param params
  */
-void mrc_profiler_init(const char * cache_algorithm_str, const char * profiler_str, const char * params_str, const char * mrc_size_str, mrcProfiler::mrc_profiler_e &profiler_type, mrcProfiler::mrc_profiler_params_t &params){
+void mrc_profiler_params_parse(const char * cache_algorithm_str, const char * profiler_str, const char * params_str, const char * mrc_size_str, mrcProfiler::mrc_profiler_e &profiler_type, mrcProfiler::mrc_profiler_params_t &params){
     if(strcmp(profiler_str, "SHARDS") == 0 || strcmp(profiler_str, "shards") == 0){
         profiler_type = mrcProfiler::SHARDS_PROFILER;
         if(strcmp(cache_algorithm_str, "LRU")){
@@ -414,14 +413,13 @@ void parse_cmd(int argc, char *argv[], struct arguments *args) {
   args->reader = create_reader(trace_type_str, args->trace_path,
                                args->trace_type_params, args->n_req, args->ignore_obj_size, 1);
 
-  mrc_profiler_init(args->cache_algorithm_str, args->mrc_profiler_str, args->mrc_profiler_params_str, args->mrc_size_str, args->mrc_profiler_type, args->mrc_profiler_params);
+  mrc_profiler_params_parse(args->cache_algorithm_str, args->mrc_profiler_str, args->mrc_profiler_params_str, args->mrc_size_str, args->mrc_profiler_type, args->mrc_profiler_params);
 
   if(args->mrc_profiler_params.profile_wss_ratio.size() != 0){
     // need calcuate the working set size
     long wss = 0;
     int64_t wss_obj = 0, wss_byte = 0;
     cal_working_set_size(args->reader, &wss_obj, &wss_byte);
-    // TODO: support ignore_obj_size
     wss = wss_byte;
 
     for(int i = 0; i < args->mrc_profiler_params.profile_wss_ratio.size(); i++){

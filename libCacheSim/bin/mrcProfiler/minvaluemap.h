@@ -13,8 +13,10 @@ public:
         return map.count(key);
     }
 
-    K insert(const K &key, const V &value)
+
+    K insert(const K &key, const V &value, bool & poped)
     {
+        poped = false;
         auto it = map.find(key);
         if (it != map.end())
         {
@@ -38,6 +40,7 @@ public:
                 set.erase(last);
                 set.insert({value, key});
                 map.erase(last.second);
+                poped = true;
                 return last.second;
             }
         }
