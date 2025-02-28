@@ -42,13 +42,11 @@ int main(int argc, char *argv[]) {
   struct arguments args;
   parse_cmd(argc, argv, &args);
 
-  // print_args(&args);
-
   mrcProfiler::MRCProfilerBase * profiler = create_mrc_profiler(args.mrc_profiler_type, args.reader, args.ofilepath, args.mrc_profiler_params);
 
   profiler->run();
 
-  profiler->print();
+  profiler->print(args.ofilepath);
 
   delete profiler;
 

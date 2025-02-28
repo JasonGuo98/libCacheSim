@@ -1,6 +1,6 @@
 
-add_executable(mrcProfiler main.cpp mrcProfiler.cpp cli_parser.cpp ../cli_reader_utils.c)
-target_link_libraries(mrcProfiler m zstd dl pthread 
+add_executable(mrcProfiler main.cpp cli_parser.cpp ../cli_reader_utils.c)
+target_link_libraries(mrcProfiler mrcProfilerLib m zstd dl pthread 
                 -Wl,--whole-archive 
                 libCacheSim 
                 -Wl,--no-whole-archive

@@ -7,10 +7,10 @@
 #include <string>
 
 #include "../../include/libCacheSim/const.h"
+#include "../../mrcProfiler/mrcProfiler.h"
 #include "../../utils/include/mystr.h"
 #include "../../utils/include/mysys.h"
 #include "../cli_reader_utils.h"
-#include "./mrcProfiler.h"
 #include "./internal.h"
 
 #ifdef __cplusplus
@@ -403,12 +403,6 @@ void parse_cmd(int argc, char *argv[], struct arguments *args) {
 
   args->trace_path = args->args[0];
   const char *trace_type_str = args->args[1];
-
-  if (args->ofilepath[0] == '\0') {
-    char *trace_filename = rindex(args->trace_path, '/');
-    snprintf(args->ofilepath, OFILEPATH_LEN, "%s",
-             trace_filename == NULL ? args->trace_path : trace_filename + 1);
-  }
 
   args->reader = create_reader(trace_type_str, args->trace_path,
                                args->trace_type_params, args->n_req, args->ignore_obj_size, 1);

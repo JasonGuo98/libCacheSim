@@ -2,7 +2,7 @@
 
 #include <inttypes.h>
 
-#include "./mrcProfiler.h"
+#include "../../mrcProfiler/mrcProfiler.h"
 #include "../../include/libCacheSim/enum.h"
 #include "../../include/libCacheSim/reader.h"
 

@@ -101,7 +101,7 @@ mrcProfiler supports various trace formats. For details, refer to [quickstart_ca
 
 Commands:
 
-```
+```bash
 # cachesim
 time ./cachesim /path_to/cluster52.oracleGeneral.sample10 oracleGeneral LRU 10MB,20MB,30MB,40MB,50MB,60MB,70MB,80MB,90MB,100MB --verbose=0
 
@@ -124,7 +124,7 @@ resluts:
 
 Commands:
 
-```
+```bash
 # cachesim for FIFO
 time ./cachesim /path_to/cluster52.oracleGeneral.sample10 oracleGeneral FIFO 10MB,20MB,30MB,40MB,50MB,60MB,70MB,80MB,90MB,100MB --verbose=0
 
