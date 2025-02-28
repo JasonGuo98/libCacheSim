@@ -111,6 +111,11 @@ if (ENABLE_GLCACHE)
         )
 endif()
 
+set (sourceCPP ${sourceCPP} 
+        BeladyOnline/BeladyOnline.cpp
+        BeladyOnline/BeladyOnline_impl.cpp
+)
+
 
 add_library (evictionC ${sourceC})
 target_link_libraries(evictionC cachelib dataStructure utils)
