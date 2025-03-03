@@ -206,7 +206,7 @@ static cache_t *create_test_cache(const char *alg_name, common_cache_params_t cc
     cache = Clock_init(cc_params, NULL);
   } else if (strcasecmp(alg_name, "Belady") == 0) {
     cache = Belady_init(cc_params, NULL);
-  } else if (strcasecmp(alg_name, "Belady") == 0) {
+  } else if (strcasecmp(alg_name, "BeladyOnline") == 0) {
     cache = BeladyOnline_init(cc_params, NULL);
   } else if (strcasecmp(alg_name, "BeladySize") == 0) {
     cache = BeladySize_init(cc_params, NULL);
