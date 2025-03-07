@@ -142,6 +142,9 @@ typedef struct reader {
   // lcs trace version, used only lcs reader
   int64_t lcs_ver;
 
+  // mooncake trace version, used only mooncake reader
+  void * mooncake_req;
+
   /* used for trace sampling */
   sampler_t *sampler;
   enum read_direction read_direction;

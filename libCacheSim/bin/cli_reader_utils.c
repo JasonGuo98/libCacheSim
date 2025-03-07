@@ -42,6 +42,8 @@ trace_type_e trace_type_str_to_enum(const char *trace_type_str, const char *trac
     return TWRNS_TRACE;
   } else if (strcasecmp(trace_type_str, "vscsi") == 0) {
     return VSCSI_TRACE;
+  } else if (strcasecmp(trace_type_str, "mooncake") == 0) {
+    return MOONCAKE_TRACE;
   } else if (strcasecmp(trace_type_str, "oracleGeneralBin") == 0 || strcasecmp(trace_type_str, "oracleGeneral") == 0) {
     return ORACLE_GENERAL_TRACE;
   } else if (strcasecmp(trace_type_str, "oracleSysTwrNS") == 0) {

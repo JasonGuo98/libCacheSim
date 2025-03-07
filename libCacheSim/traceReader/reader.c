@@ -17,6 +17,7 @@
 #include "customizedReader/twrNSBin.h"
 #include "customizedReader/valpinBin.h"
 #include "customizedReader/vscsi.h"
+#include "customizedReader/mooncake.h"
 #include "generalReader/libcsv.h"
 #include "readerInternal.h"
 
@@ -110,7 +111,7 @@ reader_t *setup_reader(const char *const trace_path, const trace_type_e trace_ty
   }
   reader->file_size = st.st_size;
 
-  if (reader->trace_type == CSV_TRACE || reader->trace_type == PLAIN_TXT_TRACE) {
+  if (reader->trace_type == CSV_TRACE || reader->trace_type == PLAIN_TXT_TRACE || reader->trace_type == MOONCAKE_TRACE) {
     reader->file = fopen(reader->trace_path, "rb");
     if (reader->file == 0) {
       ERROR("Failed to open %s: %s\n", reader->trace_path, strerror(errno));
@@ -154,6 +155,9 @@ reader_t *setup_reader(const char *const trace_path, const trace_type_e trace_ty
       break;
     case VSCSI_TRACE:
       vscsiReader_setup(reader);
+      break;
+    case MOONCAKE_TRACE:
+      mooncakeReader_setup(reader);
       break;
     case TWR_TRACE:
       twrReader_setup(reader);
@@ -261,6 +265,9 @@ int read_one_req(reader_t *const reader, request_t *const req) {
         break;
       case VSCSI_TRACE:
         status = vscsi_read_one_req(reader, req);
+        break;
+      case MOONCAKE_TRACE:
+        status = mooncakeReader_read_one_req(reader, req);
         break;
       case TWR_TRACE:
         status = twr_read_one_req(reader, req);
@@ -486,6 +493,8 @@ void reset_reader(reader_t *const reader) {
   } else if (reader->trace_type == CSV_TRACE) {
     csv_reset_reader(reader);
     curr_offset = ftell(reader->file);
+  } else if(reader->trace_type == MOONCAKE_TRACE){
+    fseek(reader->file, 0, SEEK_SET);
   } else {
     reader->mmap_offset = reader->trace_start_offset;
     curr_offset = reader->mmap_offset;
@@ -537,6 +546,12 @@ int close_reader(reader_t *const reader) {
   if (reader->trace_type == PLAIN_TXT_TRACE) {
     fclose(reader->file);
     free(reader->line_buf);
+  } else if (reader->trace_type == MOONCAKE_TRACE) {
+    fclose(reader->file);
+    if(reader->mooncake_req){
+      cJSON *root = (cJSON *)reader->mooncake_req;
+      cJSON_Delete(root);
+    }
   } else if (reader->trace_type == CSV_TRACE) {
     csv_params_t *csv_params = reader->reader_params;
     fclose(reader->file);

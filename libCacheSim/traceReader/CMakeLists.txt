@@ -5,6 +5,8 @@ set(source
     generalReader/txt.c 
     generalReader/libcsv.c
     customizedReader/lcs.c
+    customizedReader/cJSON.c
+    customizedReader/mooncake.c
     reader.c
     sampling/spatial.c
     sampling/temporal.c

@@ -34,6 +34,7 @@ typedef enum {
   VSCSI_TRACE,
   TWR_TRACE,
   TWRNS_TRACE,
+  MOONCAKE_TRACE,
 
   ORACLE_SIM_TWR_TRACE,
   ORACLE_SYS_TWR_TRACE,
@@ -55,6 +56,7 @@ static char *g_trace_type_name[UNKNOWN_TRACE + 2] = {
     "VSCSI_TRACE",
     "TWR_TRACE",
     "TWRNS_TRACE",
+    "MOONCAKE_TRACE",
 
     "ORACLE_SIM_TWR_TRACE",
     "ORACLE_SYS_TWR_TRACE",

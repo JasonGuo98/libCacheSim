@@ -324,6 +324,8 @@ set(reader_source
     ${PROJECT_SOURCE_DIR}/libCacheSim/traceReader/generalReader/binary.c
     ${PROJECT_SOURCE_DIR}/libCacheSim/traceReader/generalReader/csv.c
     ${PROJECT_SOURCE_DIR}/libCacheSim/traceReader/customizedReader/lcs.c
+    ${PROJECT_SOURCE_DIR}/libCacheSim/traceReader/customizedReader/cJSON.c
+    ${PROJECT_SOURCE_DIR}/libCacheSim/traceReader/customizedReader/mooncake.c
     ${PROJECT_SOURCE_DIR}/libCacheSim/traceReader/generalReader/libcsv.c
     ${PROJECT_SOURCE_DIR}/libCacheSim/traceReader/generalReader/txt.c
 )
